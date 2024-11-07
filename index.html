@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Ultimus Interview Test - Frontend</title>
+
+  <!-- Link to local Bootstrap CSS -->
+  <link rel="stylesheet" href="libs/bootstrap/css/bootstrap.min.css" />
+
+  <script src="libs/angular/js/angular.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+</head>
+
+<body ng-app="app">
+  <div class="container" ng-controller="MainController">
+    <form>
+      <div class="row mb-4">
+        <div class="col-md-4">
+          <div class="form-group">
+            <label for="selectOption">Choose an option</label>
+            <select id="selectOption" class="form-control" ng-model="selectedOption" ng-change="selectOptionChange()">
+              <option value="" disabled selected>Select an option</option>
+              <option value="customer">Customer</option>
+              <option value="product">Product</option>
+              <option value="customerCount">
+                Customers number by address type and states
+              </option>
+              <option value="topTenSellingProducts">
+                TOP 10 best-selling products
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row" ng-show="selectedOption == 'customer'">
+        <div class="col-md-6">
+          <input type="text" class="form-control" placeholder="Type to seach by first & last name"
+            ng-model="CustomerNameSearch" ng-change="customerSearch()" />
+        </div>
+        <div class="col-md-6">
+          <select id="addressTypeSearch" class="form-control" ng-model="addressTypeSearchOption"
+            ng-options="address for address in customerAddresses" ng-change="addressTypeChange()">
+            <option value="">Select Address Type</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" ng-show="selectedOption === 'product'">
+        <div class="col-md-12">
+          <div class="row">
+            <div class="col-md-6">
+              <input type="text" class="form-control" placeholder="Type to search by name" ng-model="ProductNameSearch"
+                ng-change="productSearch()" />
+            </div>
+            <div class="col-md-6">
+              <select id="productCategorySearch" class="form-control" ng-model="productCategorySearchOption"
+                ng-options="category.name for category in productCategories" ng-change="productCategoryChange()">
+                <option value="" selected>Select Category</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-12 mt-2 pb-0 mb-0" ng-if="totalRecords > 0">
+          Total {{totalRecords}} records
+        </div>
+        <div class="col-md-12 mb-3" style="height: 500px; overflow-y: auto;">
+          <table class="table table-bordered table-hover table-sm table-striped mt-4">
+            <thead>
+              <th ng-if="apiResponseJSON.length > 0">S.N</th>
+              <th ng-repeat="th in theads">
+                <span ng-if="!th.isHidden">
+                  {{th.key}}
+                </span>
+              </th>
+            </thead>
+            <tbody>
+              <tr ng-repeat="product in apiResponseJSON">
+                <td>{{$index + 1}}</td>
+                <td ng-repeat="td in tds">
+                  <span ng-if="td.isDate && !td.isHidden">{{ product[td.key] | date:'yyyy-MM-dd' }}</span>
+                  <span ng-if="!td.isDate  && !td.isHidden">{{ product[td.key] }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <script type="text/javascript">
+    var app = angular.module("app", []);
+    app.controller("MainController", function ($scope, $http) {
+      $scope.apiResponseJSONArray = [];
+      $scope.apiResponseJSON = [];
+      $scope.CustomerNameSearch = null;
+      $scope.theads = [];
+      $scope.tds = [];
+      $scope.port = '5292';
+      $scope.api = '';
+      $scope.totalRecords = 0;
+
+      setTimeout(function () {
+        $scope.getToken();
+      }, 0)
+
+
+      $scope.$watch(
+        "selectedOption",
+        function (selectedValue, previousValue) {
+          if (selectedValue === "customer") {
+            $scope.api = 'customers';
+            $scope.getTableData($scope, $http);
+            $scope.getDropdownsData('customer-addresses');
+          }
+          else if (selectedValue === "product") {
+            $scope.api = 'products';
+            $scope.getTableData($scope, $http);
+            $scope.getDropdownsData('product-categories');
+          }
+          else if (selectedValue === "topTenSellingProducts") {
+            $scope.api = 'products/most-sold';
+            $scope.getTableData($scope, $http);
+          }
+          else if (selectedValue === "customerCount") {
+            $scope.api = 'customers/count';
+            $scope.getTableData($scope, $http);
+          }
+        }
+      );
+
+      $scope.getTableData = function ($scope = null, $http = null) {
+        $http.get(`http://localhost:${$scope.port}/api/${$scope.api}`, {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+          }
+        }).then(
+          function (response) {
+            var response = response.data;
+            if (response.success) {
+              $scope.apiResponseJSONArray = response.data;
+              $scope.apiResponseJSON = response.data;
+              //$scope.tds = Object.keys(response.data[0])
+              var theadsAndTdsArray = $scope.formatKey(response.data[0]);
+              $scope.theads = theadsAndTdsArray[0];
+              $scope.tds = theadsAndTdsArray[1];
+              $scope.totalRecords = $scope.apiResponseJSON.length;
+            } else {
+              console.error(
+                "An error occured while processing your request, try again"
+              );
+            }
+          },
+          function (error) {
+            // Error handling: Log the error and alert the user
+            console.error("Error fetching address type data:", error);
+            alert("There was an error fetching product data.");
+          }
+        );
+      };
+
+      $scope.addressTypeChange = function () {
+        $scope.apiResponseJSON = $scope.apiResponseJSONArray.filter((row) =>
+          row.addressType
+            .toLowerCase()
+            .match($scope.addressTypeSearchOption == null ? row.addressType
+              .toLowerCase() : $scope.addressTypeSearchOption.toLowerCase())
+        );
+        $scope.totalRecords = $scope.apiResponseJSON.length;
+      };
+      $scope.customerSearch = function () {
+        $scope.apiResponseJSON = $scope.apiResponseJSONArray.filter(
+          (row) =>
+            row.firstName
+              .toLowerCase()
+              .match($scope.CustomerNameSearch.toLowerCase()) ||
+            row.lastName
+              .toLowerCase()
+              .match($scope.CustomerNameSearch.toLowerCase())
+        );
+        $scope.totalRecords = $scope.apiResponseJSON.length;
+      };
+
+      $scope.productSearch = function () {
+        $scope.apiResponseJSON = $scope.apiResponseJSONArray.filter((filter) =>
+          filter.name
+            .toLowerCase()
+            .match($scope.ProductNameSearch.toLowerCase())
+        );
+        $scope.totalRecords = $scope.apiResponseJSON.length;
+      };
+      $scope.productCategoryChange = function () {
+        if ($scope.productCategorySearchOption) {
+          $scope.apiResponseJSON = $scope.apiResponseJSONArray.filter(
+            (filter) =>
+              filter.productCategoryId ==
+              $scope.productCategorySearchOption.productCategoryId
+          );
+        } else {
+          $scope.apiResponseJSON = $scope.apiResponseJSONArray;
+        }
+        $scope.totalRecords = $scope.apiResponseJSON.length;
+      };
+
+      $scope.getDropdownsData = function (api) {
+        $http.get(`http://localhost:5292/api/${api}`, {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+          }
+        }).then(
+          function (response) {
+            var response = response.data;
+            if (response.success) {
+              if ($scope.selectedOption === "customer") {
+                $scope.customerAddresses = response.data;
+              }
+              else if ($scope.selectedOption === "product") {
+                $scope.productCategories = response.data;
+              }
+            } else {
+              console.error(
+                "An error occured while processing your request, try again"
+              );
+            }
+          },
+          function (error) {
+            console.error(`Error fetching ${api} data`, error);
+            alert(`There was an error ${api} data.`);
+          }
+        );
+      };
+
+      $scope.getToken = function () {
+        $http.get(`http://localhost:${$scope.port}/api/auth/token`).then(
+          function (response) {
+            var response = response.data;
+            if (response.token) {
+              localStorage.setItem('token', response.token);
+            }
+          },
+          function (error) {
+            console.error(`Error fetching auth/token data`, error);
+            alert(`There was an error auth/token data.`);
+          }
+        );
+      };
+
+      $scope.formatKey = function (obj) {
+        var keysArray = [];
+        var theadsAndTds = []
+        var tdsObjectArray = [];
+        for (var key in obj) {
+          var tdsObject = {};
+          if (obj.hasOwnProperty(key)) {
+            tdsObject['key'] = key;
+            tdsObject['isHidden'] = (key.indexOf('Id') > 0);
+            tdsObject['isDate'] = (key.indexOf('Date') > 0);
+            // Capitalize the first letter
+            var newKey = key.charAt(0).toUpperCase() + key.slice(1);
+
+            // Insert space before capital letters (except the first one)
+            newKey = newKey.replace(/([A-Z])/g, " $1").trim();
+
+            keysArray.push({ key: newKey, isHidden: tdsObject['isHidden'] });
+            tdsObjectArray.push(tdsObject)
+          }
+        }
+        theadsAndTds.push(keysArray)
+        theadsAndTds.push(tdsObjectArray)
+        return theadsAndTds;
+      };
+    });
+
+  </script>
+</body>
+
+</html>
